@@ -1,0 +1,45 @@
+name: CI
+
+on:
+  push:
+    branches: ['**'] # tags go through release.yml, which calls this workflow
+  pull_request:
+  workflow_dispatch:
+  workflow_call:
+
+jobs:
+  linux-gcc:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build (warnings as errors)
+        run: |
+          F="-std=c++20 -Wall -Wextra -Wpedantic -Werror -O2"
+          g++ $F tests.cpp -o tests
+          g++ $F main.cpp -o main
+      - name: Test
+        run: ./tests
+      - name: Test under AddressSanitizer + UBSan
+        run: |
+          g++ -std=c++20 -Wall -Wextra -Werror -O1 -g -fsanitize=address,undefined -fno-sanitize-recover=all tests.cpp -o tests_san
+          ./tests_san
+
+  windows-msvc:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ilammy/msvc-dev-cmd@v1
+      - name: Build (warnings as errors)
+        run: |
+          cl /nologo /std:c++20 /EHsc /W4 /WX /O2 tests.cpp
+          cl /nologo /std:c++20 /EHsc /W4 /WX /O2 main.cpp
+          cl /nologo /std:c++20 /EHsc /W4 /WX /O2 bench.cpp
+      - name: Test
+        run: ./tests.exe
+      # Shared CI runners are noisy: this is a smoke run for the job summary, not a pass/fail gate.
+      - name: Benchmark
+        run: |
+          "## Benchmark (GitHub runner, informational)" >> $env:GITHUB_STEP_SUMMARY
+          '```' >> $env:GITHUB_STEP_SUMMARY
+          ./bench.exe | Tee-Object -Append -FilePath $env:GITHUB_STEP_SUMMARY
+          '```' >> $env:GITHUB_STEP_SUMMARY
